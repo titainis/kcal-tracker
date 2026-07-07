@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<title>Kcal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2314110f'/><text x='50' y='69' font-size='54' font-weight='bold' text-anchor='middle' fill='%23edae49' font-family='sans-serif'>K</text></svg>">
+<style>
+:root{
+  --bg:#14110f; --card:#1d1916; --line:#2e2721; --inset:#171310;
+  --txt:#f2ede7; --dim:#9c9184;
+  --accent:#edae49;      /* honey amber — energy, actions */
+  --protein:#7eb5e5; --carbs:#edae49; --fat:#e0776b;
+  --over:#e0776b; --ink:#241a06;
+}
+*{box-sizing:border-box;margin:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--txt);
+  font:16px/1.5 "Segoe UI Variable Text",system-ui,-apple-system,sans-serif;
+  max-width:520px;margin:0 auto;padding:14px 14px 96px}
+button{background:none;border:none;color:var(--txt);cursor:pointer;font:inherit;padding:6px;
+  -webkit-tap-highlight-color:transparent}
+.num{font-variant-numeric:tabular-nums;font-weight:700}
+.lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--dim)}
+
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+header .brand{font-size:19px;font-weight:800;letter-spacing:-.02em}
+header .brand em{color:var(--accent);font-style:normal}
+.datebar{display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:12px}
+.datebar button{font-size:22px;color:var(--dim);padding:2px 16px}
+input[type=date]{background:var(--card);color:var(--txt);border:1px solid var(--line);
+  border-radius:10px;padding:7px 12px;font:inherit;color-scheme:dark}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:16px;margin-bottom:12px}
+
+/* summary */
+.remain{display:flex;align-items:baseline;justify-content:center;gap:8px}
+.remain .num{font-size:46px;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.remain.over .num{color:var(--over)}
+.remain small{color:var(--dim);font-size:14px}
+.budget{display:flex;justify-content:center;gap:14px;font-size:13px;color:var(--dim);margin-top:2px}
+.budget b{color:var(--txt);font-weight:600}
+.budget .burn b{color:var(--accent)}
+
+/* the budget bar: solid track = base goal, hatched extension = kcal earned by exercise */
+.track{position:relative;height:12px;background:var(--inset);border:1px solid var(--line);
+  border-radius:7px;margin:14px 0 4px;overflow:hidden}
+.track .earned{position:absolute;top:0;bottom:0;right:0;
+  background:repeating-linear-gradient(-45deg,transparent 0 4px,#edae4926 4px 8px);
+  border-left:1px dashed var(--accent)}
+.track .fill{position:absolute;top:0;bottom:0;left:0;background:var(--accent);
+  border-radius:7px 0 0 7px;transition:width .4s}
+.track .fill.over{background:var(--over)}
+
+.macros{margin-top:14px;display:grid;gap:9px}
+.mrow{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center}
+.mbar{height:7px;background:var(--inset);border-radius:4px;overflow:hidden}
+.mbar div{height:100%;border-radius:4px;transition:width .4s}
+.mrow .num{font-size:13px;color:var(--dim);font-weight:600}
+.mrow .num b{color:var(--txt)}
+
+/* meals & exercise */
+.card h2{display:flex;align-items:center;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.12em;color:var(--dim);margin-bottom:4px}
+.card h2 .sum{margin-left:auto;color:var(--txt);font-weight:700;font-size:13px;letter-spacing:0}
+.card h2 .addbtn{color:var(--accent);font-size:19px;padding:0 0 0 12px;line-height:1}
+.entry{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.entry:first-of-type{border-top:none}
+.entry .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.entry .g{color:var(--dim);font-size:13px}
+.entry .k{font-variant-numeric:tabular-nums;font-weight:600}
+.entry .x{color:var(--dim);padding:4px 6px;font-size:13px}
+.empty{color:var(--dim);font-size:14px;padding:6px 0}
+
+#fab{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  background:var(--accent);color:var(--ink);font-size:16px;font-weight:800;
+  border-radius:30px;padding:15px 36px;box-shadow:0 6px 20px #000a}
+
+/* dialogs */
+dialog{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:18px;
+  padding:20px;width:min(94vw,440px);margin:auto}
+dialog::backdrop{background:#000b}
+dialog h3{margin-bottom:12px;font-size:17px;font-weight:800}
+label{display:block;margin:12px 0 4px}
+label.lbl{margin:12px 0 4px}
+input[type=number],input[type=text],select{width:100%;background:var(--inset);color:var(--txt);
+  border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.row{display:flex;gap:8px}.row>*{flex:1;min-width:0}
+.scanbtn{background:var(--inset);border:1px solid var(--line);border-radius:12px;
+  padding:11px 4px;font-size:14px;font-weight:600}
+.sug{position:relative}
+.sug ul{position:absolute;z-index:2;left:0;right:0;top:100%;background:var(--inset);
+  border:1px solid var(--line);border-radius:10px;list-style:none;padding:0;
+  max-height:190px;overflow:auto;box-shadow:0 8px 24px #000a}
+.sug li{padding:10px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between;gap:8px}
+.sug li span{color:var(--dim);white-space:nowrap}
+.sug li:active,.sug li:hover{background:var(--line)}
+.entry.tap{cursor:pointer}
+.rev{border-top:1px solid var(--line);padding:12px 0 8px;margin-top:4px}
+.rev:first-child{border-top:none;margin-top:0}
+.row5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+.row5 span span.lbl{display:block;margin-bottom:2px;font-size:9px;letter-spacing:.06em}
+.row5 input{padding:8px 6px;font-size:14px}
+.revk{margin-top:6px}
+.revk b{color:var(--accent);font-size:13px}
+.check{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;color:var(--dim)}
+.check input{accent-color:var(--accent)}
+.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.primary{background:var(--accent);color:var(--ink);border-radius:12px;padding:10px 24px;font-weight:800}
+.ghost{color:var(--dim)}
+
+svg.spark{width:100%;height:56px;display:block;margin-top:10px}
+.wrow{display:flex;gap:8px;align-items:center}
+.wrow input{flex:1}
+.tdee{border-top:1px solid var(--line);margin-top:16px;padding-top:8px}
+.tdee p{font-size:14px;color:var(--dim);margin-top:10px}
+.tdee p b{color:var(--accent)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">k<em>cal</em></div>
+  <button onclick="openSettings()" aria-label="Settings">⚙</button>
+</header>
+
+<div class="datebar">
+  <button onclick="shiftDay(-1)" aria-label="Previous day">‹</button>
+  <input type="date" id="date" onchange="load()">
+  <button onclick="shiftDay(1)" aria-label="Next day">›</button>
+</div>
+
+<div class="card">
+  <div class="remain" id="remainWrap"><span class="num" id="remaining">–</span><small id="remainLbl">kcal left</small></div>
+  <div class="budget">
+    <span>eaten <b class="num" id="eaten">0</b></span>
+    <span class="burn">burned <b class="num" id="burned">0</b></span>
+    <span>budget <b class="num" id="goalTxt">0</b></span>
+  </div>
+  <div class="track"><div class="earned" id="earnedZone" style="width:0"></div><div class="fill" id="kcalBar" style="width:0"></div></div>
+  <div class="macros" id="macroRows"></div>
+</div>
+
+<div id="meals"></div>
+
+<div class="card">
+  <h2>Exercise <span class="sum" id="exSum"></span><button class="addbtn" onclick="openExercise()" aria-label="Add exercise">＋</button></h2>
+  <div id="exList"><div class="empty">Nothing yet — logged exercise raises your calorie budget.</div></div>
+</div>
+
+<div class="card">
+  <h2>Weight</h2>
+  <div class="wrow">
+    <input type="number" id="wKg" step="0.1" min="1" placeholder="kg today">
+    <button class="primary" onclick="saveWeight()">Save</button>
+  </div>
+  <svg class="spark" id="spark" viewBox="0 0 300 56" preserveAspectRatio="none"></svg>
+</div>
+
+<button id="fab" onclick="openAdd()">＋ Add food</button>
+
+<dialog id="addDlg">
+  <h3 id="addTitle">Add food</h3>
+  <div class="row" style="margin-bottom:2px" id="scanRow">
+    <button class="scanbtn" onclick="photoIn.click()">📷 Snap meal</button>
+    <button class="scanbtn" onclick="libIn.click()">🖼 Library</button>
+    <button class="scanbtn" onclick="barcodeIn.click()">▐║▌ Barcode</button>
+  </div>
+  <input type="file" accept="image/*" capture="environment" id="photoIn" hidden onchange="photoFlow(this.files[0])">
+  <input type="file" accept="image/*" id="libIn" hidden onchange="photoFlow(this.files[0])">
+  <input type="file" accept="image/*" capture="environment" id="barcodeIn" hidden onchange="barcodeFlow(this.files[0])">
+  <div id="scanStatus" class="empty" hidden></div>
+  <label class="lbl">Food</label>
+  <div class="sug">
+    <input type="text" id="aName" autocomplete="off" placeholder="Search or type a name" oninput="suggest(this.value)">
+    <ul id="sugList" hidden></ul>
+  </div>
+  <div class="row">
+    <div><label class="lbl">Amount (g)</label><input type="number" id="aGrams" min="1" value="100" inputmode="decimal"></div>
+    <div><label class="lbl">Meal</label><select id="aMeal"><option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option></select></div>
+  </div>
+  <label class="lbl">Per 100 g</label>
+  <div class="row">
+    <input type="number" id="aKcal" placeholder="kcal" inputmode="decimal">
+    <input type="number" id="aP" placeholder="prot" inputmode="decimal">
+    <input type="number" id="aC" placeholder="carb" inputmode="decimal">
+    <input type="number" id="aF" placeholder="fat" inputmode="decimal">
+  </div>
+  <label class="check"><input type="checkbox" id="aSave" checked> Save to my foods</label>
+  <div class="actions">
+    <button class="ghost" onclick="addDlg.close()">Cancel</button>
+    <button class="primary" id="addBtn" onclick="addEntry()">Add</button>
+  </div>
+</dialog>
+
+<dialog id="revDlg">
+  <h3>Meal scan — check &amp; adjust</h3>
+  <div id="revItems"></div>
+  <div class="row" style="margin-top:14px;align-items:center">
+    <select id="revMeal"><option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option></select>
+    <span class="num" id="revTotal" style="text-align:right"></span>
+  </div>
+  <div class="actions">
+    <button class="ghost" onclick="revDlg.close()">Cancel</button>
+    <button class="primary" id="revBtn" onclick="logReview()">Log all</button>
+  </div>
+</dialog>
+
+<dialog id="exDlg">
+  <h3>Add exercise</h3>
+  <label class="lbl">Activity</label>
+  <select id="eType" onchange="exCalc()"></select>
+  <input type="text" id="eName" placeholder="Name it" style="margin-top:8px" hidden>
+  <div class="row">
+    <div><label class="lbl">Minutes</label><input type="number" id="eMin" min="1" value="30" inputmode="numeric" oninput="exCalc()"></div>
+    <div><label class="lbl">Calories burned</label><input type="number" id="eKcal" min="0" inputmode="numeric"></div>
+  </div>
+  <p class="empty" id="eHint"></p>
+  <div class="actions">
+    <button class="ghost" onclick="exDlg.close()">Cancel</button>
+    <button class="primary" onclick="addExercise()">Add</button>
+  </div>
+</dialog>
+
+<dialog id="setDlg">
+  <h3>Goals</h3>
+  <label class="lbl">Daily calories</label><input type="number" id="sKcal">
+  <div class="row">
+    <div><label class="lbl">Protein g</label><input type="number" id="sP"></div>
+    <div><label class="lbl">Carbs g</label><input type="number" id="sC"></div>
+    <div><label class="lbl">Fat g</label><input type="number" id="sF"></div>
+  </div>
+  <div class="tdee">
+    <label class="lbl">Calculate from body stats (Mifflin-St Jeor)</label>
+    <div class="row">
+      <select id="tSex"><option value="m">Male</option><option value="f">Female</option></select>
+      <input type="number" id="tAge" placeholder="age">
+      <input type="number" id="tCm" placeholder="cm">
+      <input type="number" id="tKg" placeholder="kg">
+    </div>
+    <label class="lbl">Activity</label>
+    <select id="tAct">
+      <option value="1.2">Sedentary</option>
+      <option value="1.375">Light (1–3×/wk)</option>
+      <option value="1.55" selected>Moderate (3–5×/wk)</option>
+      <option value="1.725">Heavy (6–7×/wk)</option>
+    </select>
+    <p id="tOut">Fill in stats to see maintenance calories.</p>
+    <div class="row">
+      <button class="ghost" onclick="applyTdee(-500)">Lose −500</button>
+      <button class="ghost" onclick="applyTdee(0)">Maintain</button>
+      <button class="ghost" onclick="applyTdee(300)">Gain +300</button>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="ghost" onclick="setDlg.close()">Cancel</button>
+    <button class="primary" onclick="saveSettings()">Save</button>
+  </div>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const MEALS = ["Breakfast","Lunch","Dinner","Snack"];
+const MACROS = [["protein","Protein","var(--protein)"],["carbs","Carbs","var(--carbs)"],["fat","Fat","var(--fat)"]];
+// METs (Compendium of Physical Activities); kcal = MET × kg × hours
+const ACTIVITIES = {"Walking":3.5,"Running":9.8,"Cycling":7.5,"Swimming":8,"Weight training":5,
+                    "HIIT":8,"Yoga":3,"Football":7,"Hiking":6,"Other":5};
+let day = {entries:[], exercises:[], settings:{}, weight:null, latest_kg:null};
+
+const api = (path, opts) => fetch(path, opts).then(r => {
+  if (!r.ok) throw new Error("Request failed"); return r.json();
+});
+const today = () => new Date().toLocaleDateString("sv");
+$("date").value = today();
+
+function shiftDay(n){
+  const d = new Date($("date").value + "T12:00");
+  d.setDate(d.getDate() + n);
+  $("date").value = d.toLocaleDateString("sv");
+  load();
+}
+
+async function load(){
+  day = await api("/api/day?date=" + $("date").value);
+  render();
+  drawSpark();
+}
+
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function render(){
+  const s = day.settings;
+  const sum = k => day.entries.reduce((a,e) => a + e[k], 0);
+  const kcal = sum("kcal"), goal = +s.kcal || 2000;
+  const burned = day.exercises.reduce((a,e) => a + e.kcal, 0);
+  const budget = goal + burned, left = budget - kcal;
+
+  $("remaining").textContent = Math.round(Math.abs(left));
+  $("remainLbl").textContent = left < 0 ? "kcal over" : "kcal left";
+  $("remainWrap").classList.toggle("over", left < 0);
+  $("eaten").textContent = Math.round(kcal);
+  $("burned").textContent = Math.round(burned);
+  $("goalTxt").textContent = Math.round(budget);
+  $("kcalBar").style.width = Math.min(100, kcal/budget*100) + "%";
+  $("kcalBar").classList.toggle("over", kcal > budget);
+  $("earnedZone").style.width = (burned/budget*100) + "%";
+
+  $("macroRows").innerHTML = MACROS.map(([key,name,color]) => {
+    const val = sum(key), g = +s[key] || 1;
+    return `<div class="mrow"><span class="lbl">${name}</span>` +
+      `<div class="mbar"><div style="width:${Math.min(100,val/g*100)}%;background:${color}"></div></div>` +
+      `<span class="num"><b>${Math.round(val)}</b> / ${Math.round(g)}g</span></div>`;
+  }).join("");
+
+  $("meals").innerHTML = MEALS.map(m => {
+    const es = day.entries.filter(e => e.meal === m);
+    const rows = es.map(e =>
+      `<div class="entry tap" onclick="editEntry(${e.id})"><span class="n">${esc(e.name)}</span><span class="g">${e.grams}g</span>` +
+      `<span class="k">${Math.round(e.kcal)}</span><button class="x" onclick="event.stopPropagation();del('entries',${e.id})">✕</button></div>`
+    ).join("") || `<div class="empty">Nothing logged</div>`;
+    const tot = es.reduce((a,e) => a + e.kcal, 0);
+    return `<div class="card"><h2>${m}<span class="sum">${tot ? Math.round(tot) + " kcal" : ""}</span>` +
+      `<button class="addbtn" onclick="openAdd('${m}')" aria-label="Add to ${m}">＋</button></h2>${rows}</div>`;
+  }).join("");
+
+  $("exSum").textContent = burned ? `−${Math.round(burned)} kcal` : "";
+  $("exList").innerHTML = day.exercises.map(e =>
+    `<div class="entry"><span class="n">${esc(e.name)}</span><span class="g">${e.minutes} min</span>` +
+    `<span class="k">${Math.round(e.kcal)}</span><button class="x" onclick="del('exercises',${e.id})">✕</button></div>`
+  ).join("") || `<div class="empty">Nothing yet — logged exercise raises your calorie budget.</div>`;
+
+  $("wKg").value = day.weight ?? "";
+}
+
+async function del(kind, id){
+  await api(`/api/${kind}/${id}`, {method:"DELETE"});
+  load();
+}
+
+/* ---- food ---- */
+let editingId = null;
+function openAdd(meal){
+  editingId = null;
+  ["aName","aKcal","aP","aC","aF"].forEach(id => $(id).value = "");
+  $("aGrams").value = 100;
+  $("aMeal").value = meal || MEALS[[11,16,21].filter(h => new Date().getHours() >= h).length] || "Snack";
+  $("aSave").checked = true;
+  setAddMode("Add food", "Add", false);
+  addDlg.showModal();
+}
+
+function editEntry(id){
+  const e = day.entries.find(x => x.id === id);
+  editingId = id;
+  $("aName").value = e.name;
+  $("aGrams").value = e.grams;
+  $("aMeal").value = e.meal;
+  // entry stores totals; derive per-100 g back for editing
+  for (const [k, el] of [["kcal","aKcal"],["protein","aP"],["carbs","aC"],["fat","aF"]])
+    $(el).value = Math.round(e[k] / e.grams * 1000) / 10;
+  $("aSave").checked = false;
+  setAddMode("Edit food", "Save", true);
+  addDlg.showModal();
+}
+
+function setAddMode(title, btn, editing){
+  $("addTitle").textContent = title;
+  $("addBtn").textContent = btn;
+  $("scanRow").hidden = editing;
+  $("sugList").hidden = true;
+  scanStatus("");
+}
+
+let sugTimer;
+function suggest(q){
+  clearTimeout(sugTimer);
+  if (!q) return $("sugList").hidden = true;
+  sugTimer = setTimeout(async () => {
+    const foods = await api("/api/foods?q=" + encodeURIComponent(q));
+    const ul = $("sugList");
+    ul.innerHTML = foods.map((f,i) => `<li data-i="${i}">${esc(f.name)} <span>${f.kcal} kcal</span></li>`).join("");
+    ul.hidden = !foods.length;
+    ul.onclick = e => {
+      const li = e.target.closest("li"); if (!li) return;
+      const f = foods[+li.dataset.i];
+      $("aName").value = f.name; $("aKcal").value = f.kcal;
+      $("aP").value = f.protein; $("aC").value = f.carbs; $("aF").value = f.fat;
+      ul.hidden = true; $("aSave").checked = false;
+      $("aGrams").focus();
+    };
+  }, 200);
+}
+
+function scanStatus(msg){
+  const el = $("scanStatus");
+  el.hidden = !msg;
+  el.textContent = msg || "";
+}
+
+function toJpeg(file, maxPx){ // downscale via canvas, return base64 without data: prefix
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(img.src);
+      res(cv.toDataURL("image/jpeg", 0.85).split(",")[1]);
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function photoFlow(file){
+  if (!file) return;
+  $("photoIn").value = ""; $("libIn").value = "";
+  scanStatus("Analyzing photo… (local AI can take a minute)");
+  try {
+    const r = await fetch("/api/photo", {method:"POST", body: JSON.stringify({image: await toJpeg(file, 1024)})});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    if (!data.items.length) throw new Error("No food recognized in the photo.");
+    openReview(data.items);
+  } catch (e) { alert(e.message); }
+  scanStatus("");
+}
+
+/* ---- scan review sheet ---- */
+let revItems = [];
+const REV_FIELDS = [["grams","g"],["kcal","kcal/100g"],["protein","prot"],["carbs","carb"],["fat","fat"]];
+
+function openReview(items){
+  revItems = items;
+  $("revMeal").value = $("aMeal").value;
+  renderReview();
+  revDlg.showModal();
+}
+
+function renderReview(){
+  $("revItems").innerHTML = revItems.map((f,i) =>
+    `<div class="rev">
+      <div class="row"><input type="text" value="${esc(f.name)}" oninput="revSet(${i},'name',this.value)">
+        <button class="x" style="flex:0" onclick="revItems.splice(${i},1);renderReview()">✕</button></div>
+      <div class="row5">` +
+      REV_FIELDS.map(([k,lbl]) =>
+        `<span><span class="lbl">${lbl}</span><input type="number" value="${Math.round(f[k]*10)/10}" inputmode="decimal"
+          oninput="revSet(${i},'${k}',+this.value||0)"></span>`).join("") +
+      `</div><div class="revk lbl">≈ <b class="num" id="revK${i}">${Math.round(f.kcal*f.grams/100)}</b> kcal</div>
+    </div>`).join("") || `<div class="empty">All items removed.</div>`;
+  revTotalUpdate();
+}
+
+function revSet(i, k, v){
+  revItems[i][k] = v;
+  if (k !== "name") $("revK"+i).textContent = Math.round(revItems[i].kcal * revItems[i].grams / 100);
+  revTotalUpdate();
+}
+
+function revTotalUpdate(){
+  const t = revItems.reduce((a,f) => a + f.kcal*f.grams/100, 0);
+  $("revTotal").textContent = Math.round(t) + " kcal total";
+  $("revBtn").disabled = !revItems.length;
+}
+
+async function logReview(){
+  for (const f of revItems)
+    await api("/api/entries", {method:"POST", body: JSON.stringify({
+      date: $("date").value, meal: $("revMeal").value, name: f.name.trim() || "Food", grams: f.grams || 1,
+      per100: {kcal:f.kcal, protein:f.protein, carbs:f.carbs, fat:f.fat}, save:false})});
+  revDlg.close();
+  addDlg.close();
+  load();
+}
+
+async function barcodeFlow(file){
+  if (!file) return;
+  $("barcodeIn").value = "";
+  let code = "";
+  if ("BarcodeDetector" in window) {
+    try {
+      const det = new BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e"]});
+      const found = await det.detect(await createImageBitmap(file));
+      code = found[0]?.rawValue || "";
+    } catch {}
+  }
+  if (!code) code = (prompt("Couldn't read the barcode — type the digits printed under it:") || "").trim();
+  if (!code) return;
+  scanStatus("Looking up product…");
+  try {
+    const r = await fetch("/api/barcode?code=" + encodeURIComponent(code));
+    const f = await r.json();
+    if (!r.ok) throw new Error(f.error);
+    $("aName").value = f.name; $("aKcal").value = f.kcal;
+    $("aP").value = f.protein; $("aC").value = f.carbs; $("aF").value = f.fat;
+    $("aSave").checked = false;
+    $("aGrams").focus();
+  } catch (e) { alert(e.message); }
+  scanStatus("");
+}
+
+async function addEntry(){
+  const name = $("aName").value.trim(), grams = +$("aGrams").value;
+  if (!name || !(grams > 0)) return alert("Need a name and grams.");
+  await api(editingId ? "/api/entries/" + editingId : "/api/entries", {
+    method: editingId ? "PUT" : "POST",
+    body: JSON.stringify({
+      date: $("date").value, meal: $("aMeal").value, name, grams,
+      per100: {kcal:+$("aKcal").value||0, protein:+$("aP").value||0, carbs:+$("aC").value||0, fat:+$("aF").value||0},
+      save: $("aSave").checked,
+    })});
+  addDlg.close();
+  load();
+}
+
+/* ---- exercise ---- */
+$("eType").innerHTML = Object.keys(ACTIVITIES).map(a => `<option>${a}</option>`).join("");
+
+function openExercise(){
+  $("eMin").value = 30;
+  $("eName").value = ""; $("eName").hidden = true;
+  exCalc();
+  exDlg.showModal();
+}
+
+function exCalc(){
+  const type = $("eType").value;
+  $("eName").hidden = type !== "Other";
+  const kg = day.latest_kg || 70;
+  $("eKcal").value = Math.round(ACTIVITIES[type] * kg * (+$("eMin").value || 0) / 60);
+  $("eHint").textContent = day.latest_kg
+    ? `Estimated for your ${kg} kg — adjust if your tracker says otherwise.`
+    : "Estimated for 70 kg — log your weight below for better estimates.";
+}
+
+async function addExercise(){
+  const type = $("eType").value;
+  const name = type === "Other" ? ($("eName").value.trim() || "Exercise") : type;
+  const minutes = +$("eMin").value, kcal = +$("eKcal").value;
+  if (!(minutes > 0)) return alert("How many minutes?");
+  await api("/api/exercises", {method:"POST", body: JSON.stringify({
+    date: $("date").value, name, minutes, kcal})});
+  exDlg.close();
+  load();
+}
+
+/* ---- weight ---- */
+async function saveWeight(){
+  const kg = +$("wKg").value;
+  if (!(kg > 0)) return;
+  await api("/api/weights", {method:"POST", body: JSON.stringify({date: $("date").value, kg})});
+  load();
+}
+
+async function drawSpark(){
+  const ws = (await api("/api/weights")).slice(-30);
+  const svg = $("spark");
+  if (ws.length < 2) return svg.innerHTML = "";
+  const kgs = ws.map(w => w.kg), min = Math.min(...kgs), max = Math.max(...kgs);
+  const pts = kgs.map((kg,i) =>
+    `${(i/(kgs.length-1)*296+2).toFixed(1)},${(50 - (max===min ? .5 : (kg-min)/(max-min))*44).toFixed(1)}`);
+  svg.innerHTML = `<polyline points="${pts.join(" ")}" fill="none" stroke="var(--protein)" stroke-width="2"/>` +
+    `<text x="2" y="10" fill="var(--dim)" font-size="9">${max}</text>` +
+    `<text x="2" y="54" fill="var(--dim)" font-size="9">${min}</text>`;
+}
+
+/* ---- settings ---- */
+function openSettings(){
+  const s = day.settings;
+  $("sKcal").value = s.kcal; $("sP").value = s.protein; $("sC").value = s.carbs; $("sF").value = s.fat;
+  setDlg.showModal();
+}
+
+function tdee(){
+  const age = +$("tAge").value, cm = +$("tCm").value, kg = +$("tKg").value;
+  if (!age || !cm || !kg) return 0;
+  const bmr = 10*kg + 6.25*cm - 5*age + ($("tSex").value === "m" ? 5 : -161);
+  return Math.round(bmr * +$("tAct").value);
+}
+["tSex","tAge","tCm","tKg","tAct"].forEach(id => $(id).oninput = () => {
+  const t = tdee();
+  $("tOut").innerHTML = t ? `Maintenance ≈ <b>${t} kcal/day</b>` : "Fill in stats to see maintenance calories.";
+});
+
+function applyTdee(delta){
+  const t = tdee();
+  if (!t) return alert("Fill in age, height and weight first.");
+  const goal = t + delta;
+  $("sKcal").value = goal;
+  // simple split: protein 1.8 g/kg body weight, fat 25% kcal, carbs the rest
+  const p = Math.round(1.8 * +$("tKg").value), f = Math.round(goal*0.25/9);
+  $("sP").value = p; $("sF").value = f;
+  $("sC").value = Math.max(0, Math.round((goal - p*4 - f*9)/4));
+}
+
+async function saveSettings(){
+  await api("/api/settings", {method:"POST", body: JSON.stringify({
+    kcal:+$("sKcal").value, protein:+$("sP").value, carbs:+$("sC").value, fat:+$("sF").value})});
+  setDlg.close();
+  load();
+}
+
+load();
+</script>
+</body>
+</html>
