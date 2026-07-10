@@ -263,6 +263,9 @@ class Handler(BaseHTTPRequestHandler):
                     for k in DEFAULT_SETTINGS:
                         if k in b:
                             c.execute("UPDATE settings SET value=? WHERE key=?", (str(float(b[k])), k))
+                    for k in ("sex", "age", "cm"):  # body stats, stored as-is (not part of goal defaults)
+                        if k in b:
+                            c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", (k, str(b[k])))
                     return self.reply(200, {"ok": True})
         except (KeyError, ValueError, TypeError) as e:
             return self.reply(400, {"error": str(e)})
