@@ -4,7 +4,7 @@ Run:  python app.py
 PC:    http://localhost:8090
 Phone: http://<LAN IP shown on startup>:8090  (same Wi-Fi; Add to Home Screen)
 """
-import json, os, re, socket, sqlite3, urllib.error, urllib.request
+import json, os, re, socket, sqlite3, threading, urllib.error, urllib.request, uuid
 from datetime import date
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, quote
@@ -142,6 +142,23 @@ def analyze_photo(image_b64):
             f"(Ollama error: {e})")
 
 
+# Photo analysis runs in a background thread and is polled for, rather than
+# held open on one request/response — phones kill long-lived fetches when the
+# screen locks or the tab backgrounds, which would otherwise abort the scan.
+PHOTO_JOBS = {}
+PHOTO_JOBS_LOCK = threading.Lock()
+
+
+def run_photo_job(job_id, image_b64):
+    try:
+        items = analyze_photo(image_b64)
+        result = {"status": "done", "items": items}
+    except Exception as e:
+        result = {"status": "error", "error": str(e)}
+    with PHOTO_JOBS_LOCK:
+        PHOTO_JOBS[job_id] = result
+
+
 def barcode_lookup(code, c):
     hit = c.execute("SELECT * FROM foods WHERE barcode=?", (code,)).fetchone()
     if hit:
@@ -212,6 +229,15 @@ class Handler(BaseHTTPRequestHandler):
                     "weight": w["kg"] if w else None,
                     "latest_kg": latest["kg"] if latest else None,
                 })
+            if u.path == "/api/photo":
+                job_id = q.get("job", [""])[0]
+                with PHOTO_JOBS_LOCK:
+                    job = PHOTO_JOBS.get(job_id)
+                    if job and job["status"] != "pending":
+                        del PHOTO_JOBS[job_id]  # terminal state consumed, don't leak memory
+                if not job:
+                    return self.reply(404, {"error": "unknown or expired job"})
+                return self.reply(200, job)
             if u.path == "/api/foods":
                 s = q.get("q", [""])[0]
                 return self.reply(200, rows(c.execute(
@@ -254,11 +280,11 @@ class Handler(BaseHTTPRequestHandler):
                               (b["date"], float(b["kg"])))
                     return self.reply(200, {"ok": True})
                 if p == "/api/photo":
-                    try:
-                        items = analyze_photo(b["image"])
-                    except RuntimeError as e:
-                        return self.reply(502, {"error": str(e)})
-                    return self.reply(200, {"items": items})
+                    job_id = uuid.uuid4().hex
+                    with PHOTO_JOBS_LOCK:
+                        PHOTO_JOBS[job_id] = {"status": "pending"}
+                    threading.Thread(target=run_photo_job, args=(job_id, b["image"]), daemon=True).start()
+                    return self.reply(200, {"job": job_id})
                 if p == "/api/settings":
                     for k in DEFAULT_SETTINGS:
                         if k in b:
