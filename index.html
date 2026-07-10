@@ -80,7 +80,7 @@ input[type=date]{background:var(--card);color:var(--txt);border:1px solid var(--
 
 /* dialogs */
 dialog{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:18px;
-  padding:20px;width:min(94vw,440px);margin:auto}
+  padding:20px;width:min(94vw,440px);margin:auto;max-height:85vh;overflow-y:auto}
 dialog::backdrop{background:#000b}
 dialog h3{margin-bottom:12px;font-size:17px;font-weight:800}
 label{display:block;margin:12px 0 4px}
@@ -108,7 +108,8 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .revk b{color:var(--accent);font-size:13px}
 .check{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;color:var(--dim)}
 .check input{accent-color:var(--accent)}
-.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.actions{display:flex;justify-content:flex-end;gap:10px;margin:18px -20px -20px;
+  padding:14px 20px 20px;position:sticky;bottom:-20px;background:var(--card)}
 .primary{background:var(--accent);color:var(--ink);border-radius:12px;padding:10px 24px;font-weight:800}
 .ghost{color:var(--dim)}
 
@@ -226,6 +227,30 @@ svg.spark{width:100%;height:56px;display:block;margin-top:10px}
   </div>
 </dialog>
 
+<dialog id="onbDlg">
+  <h3>Welcome — let's set your goal</h3>
+  <p class="empty">A few body stats to calculate your daily calorie budget (Mifflin-St Jeor).</p>
+  <div class="row">
+    <select id="oSex"><option value="m">Male</option><option value="f">Female</option></select>
+    <input type="number" id="oAge" placeholder="age" inputmode="numeric">
+  </div>
+  <div class="row">
+    <input type="number" id="oCm" placeholder="height cm" inputmode="decimal">
+    <input type="number" id="oKg" placeholder="weight kg" inputmode="decimal">
+  </div>
+  <label class="lbl">Activity</label>
+  <select id="oAct">
+    <option value="1.2">Sedentary</option>
+    <option value="1.375">Light (1–3×/wk)</option>
+    <option value="1.55" selected>Moderate (3–5×/wk)</option>
+    <option value="1.725">Heavy (6–7×/wk)</option>
+  </select>
+  <p id="oOut" class="empty">Fill in your stats to see your daily calorie budget.</p>
+  <div class="actions">
+    <button class="primary" id="oBtn" onclick="finishOnboarding()" disabled>Continue</button>
+  </div>
+</dialog>
+
 <dialog id="setDlg">
   <h3>Goals</h3>
   <label class="lbl">Daily calories</label><input type="number" id="sKcal">
@@ -288,6 +313,7 @@ async function load(){
   day = await api("/api/day?date=" + $("date").value);
   render();
   drawSpark();
+  if (!day.settings.age || !day.settings.cm) onbDlg.showModal();
 }
 
 const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -567,6 +593,32 @@ async function drawSpark(){
   svg.innerHTML = `<polyline points="${pts.join(" ")}" fill="none" stroke="var(--protein)" stroke-width="2"/>` +
     `<text x="2" y="10" fill="var(--dim)" font-size="9">${max}</text>` +
     `<text x="2" y="54" fill="var(--dim)" font-size="9">${min}</text>`;
+}
+
+/* ---- onboarding (required body stats before first use) ---- */
+function onbTdee(){
+  const age = +$("oAge").value, cm = +$("oCm").value, kg = +$("oKg").value;
+  if (!age || !cm || !kg) return 0;
+  const bmr = 10*kg + 6.25*cm - 5*age + ($("oSex").value === "m" ? 5 : -161);
+  return Math.round(bmr * +$("oAct").value);
+}
+["oSex","oAge","oCm","oKg","oAct"].forEach(id => $(id).oninput = () => {
+  const t = onbTdee();
+  $("oOut").innerHTML = t ? `Maintenance ≈ <b>${t} kcal/day</b>` : "Fill in your stats to see your daily calorie budget.";
+  $("oBtn").disabled = !t;
+});
+onbDlg.addEventListener("cancel", e => e.preventDefault()); // required step — no dismissing
+
+async function finishOnboarding(){
+  const goal = onbTdee();
+  if (!goal) return;
+  const kg = +$("oKg").value;
+  const p = Math.round(1.8 * kg), f = Math.round(goal*0.25/9), cb = Math.max(0, Math.round((goal - p*4 - f*9)/4));
+  await api("/api/settings", {method:"POST", body: JSON.stringify({
+    kcal:goal, protein:p, carbs:cb, fat:f, sex:$("oSex").value, age:$("oAge").value, cm:$("oCm").value})});
+  await api("/api/weights", {method:"POST", body: JSON.stringify({date: $("date").value, kg})});
+  onbDlg.close();
+  load();
 }
 
 /* ---- settings ---- */
