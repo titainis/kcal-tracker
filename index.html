@@ -108,10 +108,10 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .revk b{color:var(--accent);font-size:13px}
 .check{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;color:var(--dim)}
 .check input{accent-color:var(--accent)}
-.actions{display:flex;justify-content:flex-end;gap:10px;margin:18px -20px -20px;
-  padding:14px 20px 20px;position:sticky;bottom:-20px;background:var(--card)}
+.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 .primary{background:var(--accent);color:var(--ink);border-radius:12px;padding:10px 24px;font-weight:800}
 .ghost{color:var(--dim)}
+button:disabled{opacity:.4;pointer-events:none}
 
 svg.spark{width:100%;height:56px;display:block;margin-top:10px}
 .wrow{display:flex;gap:8px;align-items:center}
@@ -447,19 +447,28 @@ async function photoFlow(file){
   if (!file) return;
   $("photoIn").value = ""; $("libIn").value = "";
   scanStatus("Analyzing photo… (local AI can take a minute)");
-  let wakeLock;
-  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {} // keep screen on so iOS doesn't kill the long-running fetch
   try {
-    const r = await fetch("/api/photo", {method:"POST", body: JSON.stringify({image: await toJpeg(file, 1024)})});
-    let data;
-    try { data = await r.json(); }
-    catch { throw new Error("Lost connection during analysis — keep this tab open and try again."); }
-    if (!r.ok) throw new Error(data.error);
+    const start = await api("/api/photo", {method:"POST", body: JSON.stringify({image: await toJpeg(file, 1024)})});
+    const data = await pollPhotoJob(start.job);
     if (!data.items.length) throw new Error("No food recognized in the photo.");
     openReview(data.items);
   } catch (e) { alert(e.message); }
-  wakeLock?.release();
   scanStatus("");
+}
+
+// Analysis runs server-side in a background thread; poll for it instead of holding
+// one long fetch open, since phones kill long-lived requests on screen lock/backgrounding.
+async function pollPhotoJob(job){
+  const deadline = Date.now() + 10*60*1000;
+  while (Date.now() < deadline) {
+    await new Promise(res => setTimeout(res, 2000));
+    let data;
+    try { data = await api("/api/photo?job=" + job); }
+    catch { continue; } // dropped connection mid-poll — the job keeps running server-side, just ask again
+    if (data.status === "done") return data;
+    if (data.status === "error") throw new Error(data.error);
+  }
+  throw new Error("Analysis timed out — try again.");
 }
 
 /* ---- scan review sheet ---- */
@@ -607,10 +616,14 @@ function onbTdee(){
   const bmr = 10*kg + 6.25*cm - 5*age + ($("oSex").value === "m" ? 5 : -161);
   return Math.round(bmr * +$("oAct").value);
 }
-["oSex","oAge","oCm","oKg","oAct"].forEach(id => $(id).oninput = () => {
-  const t = onbTdee();
-  $("oOut").innerHTML = t ? `Maintenance ≈ <b>${t} kcal/day</b>` : "Fill in your stats to see your daily calorie budget.";
-  $("oBtn").disabled = !t;
+["oSex","oAge","oCm","oKg","oAct"].forEach(id => {
+  const refresh = () => {
+    const t = onbTdee();
+    $("oOut").innerHTML = t ? `Maintenance ≈ <b>${t} kcal/day</b>` : "Fill in your stats to see your daily calorie budget.";
+    $("oBtn").disabled = !t;
+  };
+  $(id).oninput = refresh; $(id).onchange = refresh; // both, in case a mobile browser only fires one
+  $(id).addEventListener("keydown", e => { if (e.key === "Enter" && !$("oBtn").disabled) finishOnboarding(); });
 });
 onbDlg.addEventListener("cancel", e => e.preventDefault()); // required step — no dismissing
 
