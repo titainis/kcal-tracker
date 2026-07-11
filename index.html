@@ -79,8 +79,10 @@ input[type=date]{background:var(--card);color:var(--txt);border:1px solid var(--
   border-radius:30px;padding:15px 36px;box-shadow:0 6px 20px #000a}
 
 /* dialogs */
+/* top-anchored, not centered: iOS ignores interactive-widget, so a centered dialog's
+   buttons land behind the keyboard. Anchored high, the form stays in the visible strip. */
 dialog{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:18px;
-  padding:20px;width:min(94vw,440px);margin:auto;max-height:85vh;overflow-y:auto}
+  padding:20px;width:min(94vw,440px);margin:12px auto auto;max-height:calc(100vh - 24px);overflow-y:auto}
 dialog::backdrop{background:#000b}
 dialog h3{margin-bottom:12px;font-size:17px;font-weight:800}
 label{display:block;margin:12px 0 4px}
@@ -627,14 +629,22 @@ function onbTdee(){
 });
 onbDlg.addEventListener("cancel", e => e.preventDefault()); // required step — no dismissing
 
+// iOS only shrinks the *visual* viewport when the keyboard opens; cap open dialogs
+// to it so their content overflows and the buttons stay reachable by scrolling.
+if (window.visualViewport) visualViewport.addEventListener("resize", () =>
+  document.querySelectorAll("dialog[open]").forEach(d =>
+    d.style.maxHeight = (visualViewport.height - 24) + "px"));
+
 async function finishOnboarding(){
   const goal = onbTdee();
   if (!goal) return;
   const kg = +$("oKg").value;
   const p = Math.round(1.8 * kg), f = Math.round(goal*0.25/9), cb = Math.max(0, Math.round((goal - p*4 - f*9)/4));
-  await api("/api/settings", {method:"POST", body: JSON.stringify({
-    kcal:goal, protein:p, carbs:cb, fat:f, sex:$("oSex").value, age:$("oAge").value, cm:$("oCm").value})});
-  await api("/api/weights", {method:"POST", body: JSON.stringify({date: $("date").value, kg})});
+  try {
+    await api("/api/settings", {method:"POST", body: JSON.stringify({
+      kcal:goal, protein:p, carbs:cb, fat:f, sex:$("oSex").value, age:$("oAge").value, cm:$("oCm").value})});
+    await api("/api/weights", {method:"POST", body: JSON.stringify({date: $("date").value, kg})});
+  } catch (e) { return alert("Couldn't save — is the server running? " + e.message); }
   onbDlg.close();
   load();
 }
